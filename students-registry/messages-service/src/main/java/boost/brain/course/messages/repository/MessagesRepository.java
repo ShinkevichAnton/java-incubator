@@ -28,9 +28,7 @@ public class MessagesRepository {
         this.entityManager = entityManager;
     }
 
-    private <T> boolean checkObjectAsNullData(T item) {
-        return item == null;
-    }
+
 
     public Optional<MessageDto> create(final MessageDto messageDto) {
         if (checkObjectAsNullData(messageDto)) {
@@ -192,6 +190,10 @@ public class MessagesRepository {
         MessageDto result = new MessageDto();
         BeanUtils.copyProperties(messageEntity, result);
         return result;
+    }
+
+    private <T> boolean checkObjectAsNullData(T item) {
+        return item == null;
     }
 
 }
