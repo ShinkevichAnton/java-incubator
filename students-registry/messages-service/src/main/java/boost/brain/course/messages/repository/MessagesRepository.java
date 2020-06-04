@@ -28,17 +28,18 @@ public class MessagesRepository {
         this.entityManager = entityManager;
     }
 
-    public MessageDto create(final MessageDto messageDto) {
-        if (messageDto == null) {
-            return null;
-        }
-        MessageEntity messageEntity = new MessageEntity();
-        BeanUtils.copyProperties(messageDto, messageEntity);
-        entityManager.persist(messageEntity);
-        MessageDto result = new MessageDto();
-        BeanUtils.copyProperties(messageEntity, result);
-        return result;
+    private <T> boolean checkObjectAsNullData(T item) {
+        return item == null;
     }
+
+
+    public Optional<MessageDto> create(final MessageDto messageDto) {
+        if (checkObjectAsNullData(messageDto)) {
+            return Optional.empty();
+        }
+        return Optional.of(getNewCopyingMessageDto(messageDto));
+    }
+
 
     public MessageDto read(final long id) {
         MessageEntity messageEntity = entityManager.find(MessageEntity.class, id);
@@ -75,21 +76,13 @@ public class MessagesRepository {
 
     public Map<String, List<MessageDto>> getAllMessageForUser(final String email) {
         Map<String, List<MessageDto>> result = new HashMap<>();
-        if (StringUtils.isEmpty(email) || !this.checkEmail(email)) {
+        if (isEmailNotCorrect(email)) {
             return result;
         }
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<MessageEntity> cq = cb.createQuery(MessageEntity.class);
-        Root<MessageEntity> from = cq.from(MessageEntity.class);
-        List<Predicate> predicateList = new ArrayList<>();
-        predicateList.add(cb.equal(from.get("author"), email));
-        predicateList.add(cb.equal(from.get("recipient"), email));
-        Predicate[] restrictions = new Predicate[predicateList.size()];
-        CriteriaQuery<MessageEntity> select = cq.select(from).where(cb.or(predicateList.toArray(restrictions)));
-        TypedQuery<MessageEntity> typedQuery = entityManager.createQuery(select);
-        List<MessageEntity> messageEntities = typedQuery.getResultList();
 
-        for (MessageEntity messageEntity: messageEntities) {
+        List<MessageEntity> messageEntities = doit(email);
+
+        for (MessageEntity messageEntity : messageEntities) {
             String author = messageEntity.getAuthor();
             String recipient = messageEntity.getRecipient();
             if (author.equals(email)) {
@@ -108,16 +101,13 @@ public class MessagesRepository {
                 result.get(author).add(messageDto);
             }
         }
-        for (Map.Entry<String,List<MessageDto>> pair: result.entrySet()) {
-            Collections.sort(pair.getValue(), (MessageDto m1, MessageDto m2) -> (int)(m1.getCreateDate() - m2.getCreateDate()));
+        for (Map.Entry<String, List<MessageDto>> pair : result.entrySet()) {
+            pair.getValue().sort((MessageDto m1, MessageDto m2) -> (int) (m1.getCreateDate() - m2.getCreateDate()));
         }
         return result;
     }
 
-    public boolean deleteAllMessagesForUser(final String email) {
-        if (StringUtils.isEmpty(email) || !this.checkEmail(email)) {
-            return false;
-        }
+    private List<MessageEntity> doit(String email) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<MessageEntity> cq = cb.createQuery(MessageEntity.class);
         Root<MessageEntity> from = cq.from(MessageEntity.class);
@@ -127,12 +117,24 @@ public class MessagesRepository {
         Predicate[] restrictions = new Predicate[predicateList.size()];
         CriteriaQuery<MessageEntity> select = cq.select(from).where(cb.or(predicateList.toArray(restrictions)));
         TypedQuery<MessageEntity> typedQuery = entityManager.createQuery(select);
-        List<MessageEntity> messageEntities = typedQuery.getResultList();
+        return typedQuery.getResultList();
+    }
+
+    //Проверка на некорректность e-mail
+    private boolean isEmailNotCorrect(String email) {
+        return StringUtils.isEmpty(email) || !this.checkEmail(email);
+    }
+
+    public boolean deleteAllMessagesForUser(final String email) {
+        if (StringUtils.isEmpty(email) || !this.checkEmail(email)) {
+            return false;
+        }
+        var messageEntities = doit(email);
 
         if (messageEntities == null || messageEntities.isEmpty()) {
             return false;
         }
-        for (MessageEntity messageEntity: messageEntities) {
+        for (MessageEntity messageEntity : messageEntities) {
             entityManager.remove(messageEntity);
         }
         return true;
@@ -153,7 +155,7 @@ public class MessagesRepository {
         if (messageEntities == null || messageEntities.isEmpty()) {
             return false;
         }
-        for (MessageEntity messageEntity: messageEntities) {
+        for (MessageEntity messageEntity : messageEntities) {
             if (!messageEntity.isRead()) {
                 messageEntity.setRead(true);
                 messageEntity.setReadDate(System.currentTimeMillis());
@@ -179,6 +181,13 @@ public class MessagesRepository {
         return true;
     }
 
-
+    private MessageDto getNewCopyingMessageDto(MessageDto messageDto) {
+        MessageEntity messageEntity = new MessageEntity();
+        BeanUtils.copyProperties(messageDto, messageEntity);
+        entityManager.persist(messageEntity);
+        MessageDto result = new MessageDto();
+        BeanUtils.copyProperties(messageEntity, result);
+        return result;
+    }
 
 }
