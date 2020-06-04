@@ -32,7 +32,6 @@ public class MessagesRepository {
         return item == null;
     }
 
-
     public Optional<MessageDto> create(final MessageDto messageDto) {
         if (checkObjectAsNullData(messageDto)) {
             return Optional.empty();
@@ -40,23 +39,21 @@ public class MessagesRepository {
         return Optional.of(getNewCopyingMessageDto(messageDto));
     }
 
-
-    public MessageDto read(final long id) {
-        MessageEntity messageEntity = entityManager.find(MessageEntity.class, id);
-        if (messageEntity == null) {
-            return null;
+    public Optional<MessageDto> read(final long id) {
+        var messageEntity = entityManager.find(MessageEntity.class, id);
+        if (checkObjectAsNullData(messageEntity)) {
+            return Optional.empty();
         }
-        MessageDto result = new MessageDto();
-        BeanUtils.copyProperties(messageEntity, result);
-        return result;
+        MessageDto result = getResultMessageDto(messageEntity);
+        return Optional.of(result);
     }
 
     public boolean update(final MessageDto messageDto) {
-        if (messageDto == null) {
+        if (checkObjectAsNullData(messageDto)) {
             return false;
         }
         MessageEntity messageEntity = entityManager.find(MessageEntity.class, messageDto.getId());
-        if (messageEntity == null) {
+        if (checkObjectAsNullData(messageEntity)) {
             return false;
         }
         BeanUtils.copyProperties(
@@ -67,58 +64,46 @@ public class MessagesRepository {
 
     public boolean delete(final long id) {
         MessageEntity messageEntity = entityManager.find(MessageEntity.class, id);
-        if (messageEntity == null) {
+        if (checkObjectAsNullData(messageEntity)) {
             return false;
         }
         entityManager.remove(messageEntity);
         return true;
     }
 
-    public Map<String, List<MessageDto>> getAllMessageForUser(final String email) {
+    public Optional <Map<String, List<MessageDto>>> getAllMessageForUser(final String email) {
         Map<String, List<MessageDto>> result = new HashMap<>();
         if (isEmailNotCorrect(email)) {
-            return result;
+            return Optional.of(result);
         }
 
-        List<MessageEntity> messageEntities = doit(email);
+        List<MessageEntity> messageEntities = getMessageEntityListForEmail(email);
 
         for (MessageEntity messageEntity : messageEntities) {
             String author = messageEntity.getAuthor();
             String recipient = messageEntity.getRecipient();
             if (author.equals(email)) {
                 if (!result.containsKey(recipient)) {
-                    result.put(recipient, new ArrayList<MessageDto>());
+                    result.put(recipient, new ArrayList<>());
                 }
-                MessageDto messageDto = new MessageDto();
-                BeanUtils.copyProperties(messageEntity, messageDto);
+
+
+                MessageDto messageDto = getResultMessageDto(messageEntity);
                 result.get(recipient).add(messageDto);
             } else if (recipient.equals(email)) {
                 if (!result.containsKey(author)) {
-                    result.put(author, new ArrayList<MessageDto>());
+                    result.put(author, new ArrayList<>());
                 }
-                MessageDto messageDto = new MessageDto();
-                BeanUtils.copyProperties(messageEntity, messageDto);
+                MessageDto messageDto = getResultMessageDto(messageEntity);
                 result.get(author).add(messageDto);
             }
         }
         for (Map.Entry<String, List<MessageDto>> pair : result.entrySet()) {
             pair.getValue().sort((MessageDto m1, MessageDto m2) -> (int) (m1.getCreateDate() - m2.getCreateDate()));
         }
-        return result;
+        return Optional.of(result);
     }
 
-    private List<MessageEntity> doit(String email) {
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<MessageEntity> cq = cb.createQuery(MessageEntity.class);
-        Root<MessageEntity> from = cq.from(MessageEntity.class);
-        List<Predicate> predicateList = new ArrayList<>();
-        predicateList.add(cb.equal(from.get("author"), email));
-        predicateList.add(cb.equal(from.get("recipient"), email));
-        Predicate[] restrictions = new Predicate[predicateList.size()];
-        CriteriaQuery<MessageEntity> select = cq.select(from).where(cb.or(predicateList.toArray(restrictions)));
-        TypedQuery<MessageEntity> typedQuery = entityManager.createQuery(select);
-        return typedQuery.getResultList();
-    }
 
     //Проверка на некорректность e-mail
     private boolean isEmailNotCorrect(String email) {
@@ -129,7 +114,7 @@ public class MessagesRepository {
         if (StringUtils.isEmpty(email) || !this.checkEmail(email)) {
             return false;
         }
-        var messageEntities = doit(email);
+        var messageEntities = getMessageEntityListForEmail(email);
 
         if (messageEntities == null || messageEntities.isEmpty()) {
             return false;
@@ -173,6 +158,19 @@ public class MessagesRepository {
         return result;
     }
 
+    private List<MessageEntity> getMessageEntityListForEmail(String email) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<MessageEntity> cq = cb.createQuery(MessageEntity.class);
+        Root<MessageEntity> from = cq.from(MessageEntity.class);
+        List<Predicate> predicateList = new ArrayList<>();
+        predicateList.add(cb.equal(from.get("author"), email));
+        predicateList.add(cb.equal(from.get("recipient"), email));
+        Predicate[] restrictions = new Predicate[predicateList.size()];
+        CriteriaQuery<MessageEntity> select = cq.select(from).where(cb.or(predicateList.toArray(restrictions)));
+        TypedQuery<MessageEntity> typedQuery = entityManager.createQuery(select);
+        return typedQuery.getResultList();
+    }
+
     private boolean checkEmail(final String email) {
         EmailValidator emailValidator = new EmailValidator();
         if (!emailValidator.isValid(email, null)) {
@@ -185,6 +183,12 @@ public class MessagesRepository {
         MessageEntity messageEntity = new MessageEntity();
         BeanUtils.copyProperties(messageDto, messageEntity);
         entityManager.persist(messageEntity);
+        MessageDto result = getResultMessageDto(messageEntity);
+        return result;
+    }
+
+
+    private MessageDto getResultMessageDto(MessageEntity messageEntity) {
         MessageDto result = new MessageDto();
         BeanUtils.copyProperties(messageEntity, result);
         return result;
